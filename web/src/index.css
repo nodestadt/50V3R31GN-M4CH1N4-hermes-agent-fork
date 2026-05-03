@@ -1,3 +1,27 @@
+/* TACTICAL_AUTHORITY v1.3.1 — Phase 119 */
+:root {
+  --ta-bg: #1A282F;
+  --ta-accent: #376374;
+  --ta-accent-light: #4a8a9e;
+  --ta-text: #d4e8ee;
+  --ta-muted: #7aa8b8;
+  --ta-panel: #1f3038;
+  --ta-border: #2a4550;
+  --ta-font-header: 'Cinzel', serif;
+  --ta-font-data: 'Lexend', sans-serif;
+}
+body {
+  background: var(--ta-bg);
+  color: var(--ta-text);
+  font-family: var(--ta-font-data);
+}
+h1, h2, h3, h4 {
+  font-family: var(--ta-font-header);
+  color: var(--ta-accent-light);
+}
+a { color: var(--ta-accent); }
+a:hover { color: var(--ta-accent-light); }
+
 @import 'tailwindcss';
 @import '@nous-research/ui/styles/globals.css';
 
