@@ -391,6 +391,22 @@ def _load_local_whisper_model(model_name: str):
         return WhisperModel(model_name, device="cpu", compute_type="int8")
 
 
+# SOVEREIGN_ARTERY: MCP whisper://live-transcript takes priority over internal faster-whisper
+# When sovereign_whisper_mcp is registered in mcp_servers, poll that resource first.
+# Fallback to internal faster-whisper if MCP resource returns empty or unavailable.
+
+
+def _get_ambient_intent_from_whisper_mcp() -> str:
+    """
+    Poll whisper://live-transcript from sovereign-whisper-mcp MCP sidecar.
+    Returns transcribed ambient text or empty string if unavailable.
+    Phase 119 stub — full MCP client wiring in Phase 120.
+    """
+    # TODO Phase 120: open MCP stdio connection to sovereign-whisper-mcp
+    # and call resources/read with uri="whisper://live-transcript"
+    return ""
+
+
 def _transcribe_local(file_path: str, model_name: str) -> Dict[str, Any]:
     """Transcribe using faster-whisper (local, free)."""
     global _local_model, _local_model_name
