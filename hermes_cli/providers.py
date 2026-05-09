@@ -199,6 +199,11 @@ HERMES_OVERLAYS: Dict[str, HermesOverlay] = {
         transport="bedrock_converse",
         auth_type="aws_sdk",
     ),
+    "sovereign-vsb": HermesOverlay(
+        transport="openai_chat",
+        extra_env_vars=("HERMES_API_TOKEN",),
+        base_url_env_var="HERMES_API_URL",
+    ),
 }
 
 

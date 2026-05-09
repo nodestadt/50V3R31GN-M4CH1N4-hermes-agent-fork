@@ -9,7 +9,7 @@ Core design:
 import logging
 from agent.model_provider import ModelProvider
 from typing import List, Dict, Optional, Any
-from vsb_router import VSBRouter, MESH_NODES
+from .vsb_router import VSBRouter, MESH_NODES
 
 logger = logging.getLogger("vsb_provider")
 
@@ -34,10 +34,30 @@ class SovereignVSBProvider(ModelProvider):
         - pulse_enabled: Enable UDP pulse sync (default: True)
         """
         self.config = config
-        self.router = VSBRouter(MESH_NODES)
+        
+        # Parse mesh_nodes from config
+        mesh_nodes_config = config.get("mesh_nodes", [])
+        nodes = []
+        from .vsb_router import Node, VSBRouter
+        
+        for n in mesh_nodes_config:
+            nodes.append(Node(
+                id=n["id"],
+                ip=n["ip"],
+                port=n["port"],
+                models=n["models"]
+            ))
+        
+        if not nodes:
+            # Fallback to hardcoded for back-compat
+            from .vsb_router import MESH_NODES
+            nodes = MESH_NODES
+            logger.warning("No mesh_nodes found in config, using hardcoded fallback")
+
+        self.router = VSBRouter(nodes)
         self.pulse_enabled = config.get("pulse_enabled", True)
 
-        logger.info(f"Initializing VSB provider (pulse_enabled={self.pulse_enabled})")
+        logger.info(f"Initializing VSB provider with {len(nodes)} nodes (pulse_enabled={self.pulse_enabled})")
 
         if self.pulse_enabled:
             self.router.start_pulse_sync()
@@ -101,7 +121,7 @@ class SovereignVSBProvider(ModelProvider):
         prompt = self._build_prompt(messages)
 
         # Route inference
-        result = self.router.route_inference(model_name, prompt)
+        result = self.router.route_inference(model_name, prompt, **kwargs)
 
         if "error" in result:
             logger.error(f"Generation error for {model_id}: {result['error']}")
@@ -123,14 +143,37 @@ class SovereignVSBProvider(ModelProvider):
         model_id: str,
         messages: List[Dict],
         **kwargs
-    ) -> Dict:
+    ) -> Any:
         """
-        Stream completion (simplified - batches).
+        Stream completion via VSB routing.
         """
         logger.info(f"Streaming via VSB for model: {model_id}")
-        # TokenSpeed supports streaming - implement as generator
-        # For now: return generate response
-        return self.generate(model_id, messages, **kwargs)
+        
+        # Extract model name
+        model_name = model_id.split("/")[-1] if "/" in model_id else model_id
+
+        # Build prompt from messages
+        prompt = self._build_prompt(messages)
+
+        # Route inference (request stream)
+        kwargs["stream"] = True
+        result = self.router.route_inference(model_name, prompt, **kwargs)
+
+        if "error" in result:
+            logger.error(f"Streaming error for {model_id}: {result['error']}")
+            yield {"error": result["error"]}
+            return
+
+        # yield chunks
+        for chunk_text in result.get("stream"):
+            # Determine if this was reasoning or content based on a heuristic or just pass both
+            # VSBRouter yields whatever it finds.
+            yield {
+                "content": chunk_text, # Most things expect content
+                "reasoning": chunk_text, # But we want to flag it if it's reasoning
+                "model": model_id,
+                "node": result.get("node")
+            }
 
     def _build_prompt(self, messages: List[Dict]) -> str:
         """

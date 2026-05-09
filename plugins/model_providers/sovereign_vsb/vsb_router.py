@@ -99,7 +99,7 @@ class VSBRouter:
         logger.debug(f"Selected node {selected.id} for model {model} (load: {selected.load})")
         return selected
 
-    def route_inference(self, model: str, prompt: str) -> Dict:
+    def route_inference(self, model: str, prompt: str, **kwargs) -> Dict:
         """
         Route inference to best node via TokenSpeed.
         """
@@ -112,26 +112,102 @@ class VSBRouter:
         logger.info(f"Routing {model} -> {node.id} ({node.ip})")
 
         try:
-            # TokenSpeed backend (simplified - actual call via HTTP)
-            # This is the speed-of-light inference path
-            response = self._call_tokenspeed(node, model, prompt)
+            # Call OpenAI-compatible endpoint on node
+            response = self._call_tokenspeed(node, model, prompt, **kwargs)
             return response
         except Exception as e:
             logger.error(f"Routing error to {node.id} for {model}: {e}")
             return {"error": str(e)}
 
-    def _call_tokenspeed(self, node: Node, model: str, prompt: str) -> Dict:
+    def _call_tokenspeed(self, node: Node, model: str, prompt: str, **kwargs) -> Dict:
         """
-        Call TokenSpeed backend on node.
+        Call TokenSpeed backend (llama-server) on node.
         """
-        # Simplified HTTP call to TokenSpeed endpoint
-        # Real implementation: httpx.post(f"http://{node.ip}:8000/infer", ...)
-        # This is placeholder - actual TokenSpeed SDK integration needed
+        import httpx
+        
+        # Build OpenAI chat completions request
+        url = f"http://{node.ip}:{node.port}/v1/chat/completions"
+        
+        stream = kwargs.get("stream", False)
+        
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": kwargs.get("temperature", 0.7),
+            "max_tokens": kwargs.get("max_tokens", 4096),
+            "stream": stream
+        }
+        
+        headers = {
+            "Authorization": "Bearer machina-sovereign-mesh-v3-secret-key"
+        }
+        
+        logger.debug(f"Calling VSB backend: {url} (stream={stream})")
+        
+        # Use longer timeout for CPU inference
+        timeout = httpx.Timeout(connect=5.0, read=300.0, write=5.0, pool=10.0)
+        
+        if stream:
+            return self._stream_tokenspeed(url, payload, headers, node)
+
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            choices = data.get("choices", [])
+            if not choices:
+                raise ValueError("No choices returned from inference backend")
+                
+            choice = choices[0]
+            message = choice.get("message", {})
+            content = message.get("content", "")
+            
+            usage = data.get("usage", {})
+            
+            return {
+                "text": content,
+                "tokens": usage.get("total_tokens", 0),
+                "node": node.id,
+                "finish_reason": choice.get("finish_reason", "stop")
+            }
+
+    def _stream_tokenspeed(self, url: str, payload: Dict, headers: Dict, node: Node):
+        """
+        Stream from TokenSpeed backend.
+        """
+        import httpx
+        import json
+
+        def gen():
+            with httpx.stream("POST", url, json=payload, headers=headers, timeout=300.0) as resp:
+                resp.raise_for_status()
+                for line in resp.iter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    
+                    data_str = line[6:]
+                    if data_str == "[DONE]":
+                        break
+                        
+                    try:
+                        chunk = json.loads(data_str)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        reasoning = delta.get("reasoning_content", "")
+                        
+                        if content:
+                            yield content
+                        elif reasoning:
+                            # Yield reasoning with a prefix so the agent can distinguish if needed
+                            # but most UIs just append it.
+                            yield reasoning
+                    except Exception as e:
+                        logger.error(f"Error parsing stream chunk: {e}")
 
         return {
-            "text": f"[TokenSpeed response for {model}]",
-            "tokens": len(prompt) // 4,
-            "node": node.id,
+            "stream": gen(),
+            "node": node.id
         }
 
     def start_pulse_sync(self):
@@ -166,12 +242,12 @@ class VSBRouter:
         self.running = False
 
 
-# Mesh node configuration (from Phase 1)
+# Mesh node configuration (Tailscale Artery)
 MESH_NODES = [
-    Node(id="node-a", ip="10.0.0.10", port=8000, models=["falcon", "embedding"]),
-    Node(id="node-b", ip="10.0.0.11", port=9119, models=["carnice-9b", "qwen3-vl"]),
-    Node(id="node-c", ip="10.0.0.12", port=8080, models=["voxcpm2", "moshi", "qwen3.5-0.8b"]),
-    Node(id="node-d", ip="10.0.0.13", port=8000, models=["carnice-v2-27b", "qwen2.5-coder-14b"]),
+    Node(id="node-a", ip="100.90.196.70", port=8000, models=["falcon", "embedding"]),
+    Node(id="node-b", ip="100.66.173.31", port=9119, models=["carnice-9b", "qwen3-vl"]),
+    Node(id="node-c", ip="100.102.109.81", port=8080, models=["voxcpm2", "moshi", "qwen3.5-0.8b"]),
+    Node(id="node-d", ip="100.120.225.12", port=8080, models=["carnice-v2-27b", "qwen2.5-coder-14b"]),
 ]
 
 

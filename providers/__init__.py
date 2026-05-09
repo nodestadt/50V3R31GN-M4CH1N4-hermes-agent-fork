@@ -44,9 +44,9 @@ _REGISTRY: dict[str, ProviderProfile] = {}
 _ALIASES: dict[str, str] = {}
 _discovered = False
 
-# Repo-root ``plugins/model-providers/`` — populated at discovery time.
+# Repo-root ``plugins/model_providers/`` — populated at discovery time.
 _BUNDLED_PLUGINS_DIR = (
-    Path(__file__).resolve().parent.parent / "plugins" / "model-providers"
+    Path(__file__).resolve().parent.parent / "plugins" / "model_providers"
 )
 
 
@@ -116,6 +116,7 @@ def _import_plugin_dir(plugin_dir: Path, source: str) -> None:
     if source == "bundled":
         module_name = f"plugins.model_providers.{safe_name}"
     else:
+
         module_name = f"_hermes_user_provider_{safe_name}"
 
     if module_name in sys.modules:

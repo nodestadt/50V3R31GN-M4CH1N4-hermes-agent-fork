@@ -1200,6 +1200,16 @@ def list_authenticated_providers(
             live = [current_model]
         curated["lmstudio"] = live
 
+    # Sovereign VSB uses dynamic discovery across the mesh
+    if "sovereign-vsb" not in curated:
+        try:
+            from providers import get_provider_profile
+            vsb_profile = get_provider_profile("sovereign-vsb")
+            if vsb_profile:
+                curated["sovereign-vsb"] = vsb_profile.fetch_models() or []
+        except Exception:
+            curated["sovereign-vsb"] = []
+
     # --- 1. Check Hermes-mapped providers ---
     for hermes_id, mdev_id in PROVIDER_TO_MODELS_DEV.items():
         # Skip aliases that map to the same models.dev provider (e.g.

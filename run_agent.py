@@ -14153,6 +14153,7 @@ class AIAgent:
                                 logging.error(f"{self.log_prefix}Context compression failed after {max_compression_attempts} attempts.")
                                 self._persist_session(messages, conversation_history)
                                 return {
+                                    "final_response": "I apologize, but I reached the maximum context compression attempts and could not continue.",
                                     "messages": messages,
                                     "completed": False,
                                     "api_calls": api_call_count,
@@ -15714,7 +15715,7 @@ class AIAgent:
             str: Final assistant response
         """
         result = self.run_conversation(message, stream_callback=stream_callback)
-        return result["final_response"]
+        return result.get("final_response") or result.get("error") or "No response received from agent."
 
 
 def main(

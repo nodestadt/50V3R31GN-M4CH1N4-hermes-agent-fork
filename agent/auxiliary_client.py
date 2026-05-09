@@ -1048,6 +1048,91 @@ class AsyncAnthropicAuxiliaryClient:
         self._real_client = sync_wrapper._real_client
 
 
+class PluggableAuxiliaryClient:
+    """Adapter for pluggable model providers (e.g. Sovereign VSB)."""
+    def __init__(self, provider_instance: Any, base_url: str = ""):
+        self._provider = provider_instance
+        self.chat = self
+        self.completions = self
+        self.base_url = base_url
+        self.api_key = "pluggable-key"
+
+    def create(self, model: str, messages: List[Dict], stream: bool = False, **kwargs) -> Any:
+        if stream:
+            return self._stream(model, messages, **kwargs)
+        
+        result = self._provider.generate(model, messages, **kwargs)
+        
+        if "error" in result:
+            raise Exception(f"Pluggable provider error: {result['error']}")
+
+        return SimpleNamespace(
+            id=f"pluggable-{time.time()}",
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=result.get("content"),
+                        role="assistant"
+                    ),
+                    finish_reason=result.get("finish_reason", "stop")
+                )
+            ],
+            usage=SimpleNamespace(
+                total_tokens=result.get("tokens", 0)
+            )
+        )
+
+    def _stream(self, model: str, messages: List[Dict], **kwargs):
+        """Handle streaming via pluggable provider."""
+        class StreamWrapper:
+            def __init__(self, generator):
+                self._gen = generator
+            def __iter__(self):
+                for chunk in self._gen:
+                    content = chunk.get("content", "")
+                    reasoning = chunk.get("reasoning", "")
+                    
+                    yield SimpleNamespace(
+                        choices=[
+                            SimpleNamespace(
+                                delta=SimpleNamespace(
+                                    content=content if content else None,
+                                    reasoning_content=reasoning if reasoning else None
+                                ),
+                                finish_reason=None
+                            )
+                        ]
+                    )
+            def close(self):
+                pass
+        
+        generator = self._provider.stream(model, messages, **kwargs)
+        return StreamWrapper(generator)
+
+    def close(self):
+        shutdown_fn = getattr(self._provider, "shutdown", None)
+        if callable(shutdown_fn):
+            shutdown_fn()
+
+
+class AsyncPluggableAuxiliaryClient:
+    def __init__(self, sync_client: PluggableAuxiliaryClient):
+        self._sync = sync_client
+        self.chat = self
+        self.completions = self
+        self.base_url = sync_client.base_url
+        self.api_key = sync_client.api_key
+
+    async def create(self, *args, **kwargs) -> Any:
+        import asyncio
+        # Run sync 'create' in a thread to avoid blocking event loop
+        return await asyncio.to_thread(self._sync.create, *args, **kwargs)
+
+    async def close(self):
+        import asyncio
+        await asyncio.to_thread(self._sync.close)
+
+
 def _endpoint_speaks_anthropic_messages(base_url: str) -> bool:
     """True if the endpoint at ``base_url`` speaks the Anthropic Messages
     protocol instead of OpenAI chat.completions.
@@ -2761,6 +2846,34 @@ def resolve_provider_client(
         final_model = _normalize_resolved_model(model or default, provider)
         return (_to_async_client(client, final_model, is_vision=is_vision) if async_mode
                 else (client, final_model))
+
+    # ── Sovereign VSB (Mesh Router) ──────────────────────────
+    if provider == "sovereign-vsb":
+        try:
+            from providers import get_provider_profile
+            profile = get_provider_profile("sovereign-vsb")
+            # The profile import will trigger the registration of SovereignVSBProvider
+            from plugins.model_providers.sovereign_vsb.provider import SovereignVSBProvider
+            
+            config = profile.config if (profile and hasattr(profile, "config")) else {}
+            # Ensure mesh_nodes are available from config.yaml
+            if not config.get("mesh_nodes"):
+                from hermes_cli.config import load_config
+                h_config = load_config()
+                config = h_config.get("model_providers", {}).get("sovereign-vsb", {}).get("config", {})
+
+            vsb_instance = SovereignVSBProvider(config)
+            client = PluggableAuxiliaryClient(vsb_instance, base_url=getattr(profile, "base_url", ""))
+            final_model = model or getattr(profile, "default_model", "carnice-v2-27b")
+            
+            if async_mode:
+                return AsyncPluggableAuxiliaryClient(client), final_model
+            return client, final_model
+        except Exception as e:
+            logger.error(f"Failed to initialize Sovereign VSB: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Fall through to other providers
 
     # ── Nous Portal (OAuth) ──────────────────────────────────────────
     if provider == "nous":
