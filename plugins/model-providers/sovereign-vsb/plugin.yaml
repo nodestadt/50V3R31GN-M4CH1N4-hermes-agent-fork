@@ -1,0 +1,13 @@
+name: sovereign-vsb
+type: model-provider
+version: 1.0.0
+description: >
+  Sovereign Model Router - VSB (Virtual Sovereign Bus) with TokenSpeed
+  for high-performance inference on Node D.
+authors:
+  - Sovereign Machina
+tags:
+  - model-provider
+  - inference
+  - router
+  - tokenspeed

@@ -1,0 +1,12 @@
+name: psy-core
+type: general-hook
+version: 1.0.0
+description: >
+  Psy-core Cryptographic Audit - Real-time vetting of LLM generated tool calls.
+  Validates tool signatures and execution permissions before dispatch.
+authors:
+  - Sovereign Machina
+tags:
+  - hook
+  - security
+  - cryptographic-audit

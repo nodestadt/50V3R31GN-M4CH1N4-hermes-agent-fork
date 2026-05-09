@@ -1,0 +1,12 @@
+name: hermes-lcm
+type: memory-provider
+version: 1.0.0
+description: >
+  Lossless Context Management - Prevents context window degradation via
+  SQLite-based DAG summaries and persistent session storage.
+authors:
+  - Sovereign Machina
+tags:
+  - memory
+  - context
+  - summarization
