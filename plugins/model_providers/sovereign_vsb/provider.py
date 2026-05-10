@@ -132,6 +132,7 @@ class SovereignVSBProvider(ModelProvider):
         # Format as Hermes response
         return {
             "content": result.get("text"),
+            "reasoning": result.get("reasoning", ""),
             "tokens": result.get("tokens", 0),
             "model": model_id,
             "node": result.get("node"),
@@ -165,12 +166,10 @@ class SovereignVSBProvider(ModelProvider):
             return
 
         # yield chunks
-        for chunk_text in result.get("stream"):
-            # Determine if this was reasoning or content based on a heuristic or just pass both
-            # VSBRouter yields whatever it finds.
+        for chunk_type, chunk_text in result.get("stream"):
             yield {
-                "content": chunk_text, # Most things expect content
-                "reasoning": chunk_text, # But we want to flag it if it's reasoning
+                "content": chunk_text if chunk_type == "content" else "",
+                "reasoning": chunk_text if chunk_type == "reasoning" else "",
                 "model": model_id,
                 "node": result.get("node")
             }

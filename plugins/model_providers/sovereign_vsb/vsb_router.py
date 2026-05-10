@@ -11,6 +11,9 @@ import socket
 import struct
 import time
 import asyncio
+import httpx
+import json
+import re
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
@@ -146,7 +149,6 @@ class VSBRouter:
         """
         Call TokenSpeed backend (llama-server) on node.
         """
-        import httpx
         
         # Build OpenAI chat completions request
         url = f"http://{node.ip}:{node.port}/v1/chat/completions"
@@ -185,11 +187,20 @@ class VSBRouter:
             choice = choices[0]
             message = choice.get("message", {})
             content = message.get("content", "")
+            reasoning = message.get("reasoning_content", "")
+            
+            # If no explicit reasoning_content, check for <think> blocks in content
+            if not reasoning and "<think>" in content and "</think>" in content:
+                match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
+                if match:
+                    reasoning = match.group(1)
+                    content = content.replace(match.group(0), "").strip()
             
             usage = data.get("usage", {})
             
             return {
                 "text": content,
+                "reasoning": reasoning,
                 "tokens": usage.get("total_tokens", 0),
                 "node": node.id,
                 "finish_reason": choice.get("finish_reason", "stop")
@@ -199,10 +210,9 @@ class VSBRouter:
         """
         Stream from TokenSpeed backend.
         """
-        import httpx
-        import json
 
         def gen():
+            in_think_block = False
             with httpx.stream("POST", url, json=payload, headers=headers, timeout=300.0) as resp:
                 resp.raise_for_status()
                 for line in resp.iter_lines():
@@ -219,12 +229,31 @@ class VSBRouter:
                         content = delta.get("content", "")
                         reasoning = delta.get("reasoning_content", "")
                         
+                        if reasoning:
+                            yield ("reasoning", reasoning)
+                        
                         if content:
-                            yield content
-                        elif reasoning:
-                            # Yield reasoning with a prefix so the agent can distinguish if needed
-                            # but most UIs just append it.
-                            yield reasoning
+                            # Basic <think> block detection
+                            if "<think>" in content:
+                                in_think_block = True
+                                parts = content.split("<think>", 1)
+                                if parts[0]:
+                                    yield ("content", parts[0])
+                                content = parts[1]
+                            
+                            if "</think>" in content:
+                                parts = content.split("</think>", 1)
+                                if parts[0]:
+                                    yield ("reasoning", parts[0])
+                                in_think_block = False
+                                content = parts[1]
+                            
+                            if content:
+                                if in_think_block:
+                                    yield ("reasoning", content)
+                                else:
+                                    yield ("content", content)
+
                     except Exception as e:
                         logger.error(f"Error parsing stream chunk: {e}")
 
