@@ -1,0 +1,45 @@
+name: n8n-mcp
+type: general-hook
+version: 1.0.0
+description: >
+  Sovereign Machina n8n-MCP Bridge — Integrates n8n workflow automation
+  into the Hermes agent through the Model Context Protocol. Provides
+  health checking, workflow listing, workflow execution, and execution
+  result retrieval against the n8n instance running on Node B
+  (Director's Forge, 100.66.173.31:5678).
+authors:
+  - Sovereign Machina
+tags:
+  - n8n
+  - mcp
+  - workflow
+  - automation
+  - director-forge
+hooks:
+  - on_session_start
+  - on_session_end
+config:
+  n8n_base_url:
+    type: string
+    description: "n8n instance URL (default: http://100.66.173.31:5678)"
+    default: "http://100.66.173.31:5678"
+  n8n_api_key:
+    type: string
+    description: "n8n REST API key (or set N8N_API_KEY env var)"
+    required: false
+  timeout_seconds:
+    type: integer
+    description: "HTTP request timeout in seconds (default: 30)"
+    default: 30
+  max_retries:
+    type: integer
+    description: "Maximum retries for transient failures (default: 3)"
+    default: 3
+  retry_delay_seconds:
+    type: float
+    description: "Base delay between retries in seconds (default: 1.0)"
+    default: 1.0
+  verify_ssl:
+    type: boolean
+    description: "Verify SSL certificates (default: true)"
+    default: true

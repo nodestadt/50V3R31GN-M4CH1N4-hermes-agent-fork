@@ -1027,6 +1027,7 @@ mcp_servers:
 plugins:
   enabled:
     - telegram-artery
+    - n8n-mcp
   telegram_artery:
     # bot_token: ""  # Set TELEGRAM_ARTERY_BOT_TOKEN env var instead
     primary_node: "node_d"           # Reasoning node (100.120.225.12)
@@ -1037,4 +1038,13 @@ plugins:
     coordination_timeout: 30.0       # Seconds before handoff timeout
     monospace_blocks: true           # Monospaced reasoning formatting
     max_message_length: 4096         # Telegram message length limit
+
+  # n8n-MCP Bridge — workflow automation on Node B (Director's Forge)
+  n8n_mcp:
+    n8n_base_url: "http://100.66.173.31:5678"   # Node B Tailnet IP
+    # n8n_api_key: ""  # Set N8N_API_KEY env var instead
+    timeout_seconds: 30
+    max_retries: 3
+    retry_delay_seconds: 1.0
+    verify_ssl: true
 
