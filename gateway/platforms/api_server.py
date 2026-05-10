@@ -888,24 +888,46 @@ class APIServerAdapter(BasePlatformAdapter):
         })
 
     async def _handle_models(self, request: "web.Request") -> "web.Response":
-        """GET /v1/models — return hermes-agent as an available model."""
+        """GET /v1/models — return available models across the mesh."""
         auth_err = self._check_auth(request)
         if auth_err:
             return auth_err
 
+        models = [
+            {
+                "id": self._model_name,
+                "object": "model",
+                "created": int(time.time()),
+                "owned_by": "hermes",
+                "permission": [],
+                "root": self._model_name,
+                "parent": None,
+            }
+        ]
+
+        # Dynamic model discovery across mesh providers
+        try:
+            from providers import get_provider_profile
+            vsb_profile = get_provider_profile("sovereign-vsb")
+            if vsb_profile:
+                mesh_models = vsb_profile.fetch_models() or []
+                for m_id in mesh_models:
+                    if m_id != self._model_name:
+                        models.append({
+                            "id": m_id,
+                            "object": "model",
+                            "created": int(time.time()),
+                            "owned_by": "sovereign",
+                            "permission": [],
+                            "root": m_id,
+                            "parent": None,
+                        })
+        except Exception as e:
+            logger.debug(f"Mesh model discovery failed: {e}")
+
         return web.json_response({
             "object": "list",
-            "data": [
-                {
-                    "id": self._model_name,
-                    "object": "model",
-                    "created": int(time.time()),
-                    "owned_by": "hermes",
-                    "permission": [],
-                    "root": self._model_name,
-                    "parent": None,
-                }
-            ],
+            "data": models,
         })
 
     async def _handle_capabilities(self, request: "web.Request") -> "web.Response":

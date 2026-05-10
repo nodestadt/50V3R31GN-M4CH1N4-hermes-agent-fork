@@ -13,7 +13,7 @@
 
 ---
 
-## 🧠 The Logic Core
+## 👁️ The Vision
 **５０Ｖ３Ｒ３１ＧＮ－ＨＥＲＭＥＳ** is the tactical reasoning core of the **Sovereign Machina** Quaternary Mesh. It is a hardened fork of the **Nous Research Hermes Agent**, optimized for distributed inference, zero-trust coordination, and lossless context management.
 
 We prioritize **Architectural Sovereignty**, ensuring that the agent's logic is decoupled from cloud providers and anchored directly in our physical mesh hardware (Node D).
@@ -28,7 +28,7 @@ Materializes the `sovereign_vsb` ModelProvider, allowing the agent to dynamicall
 - **Node-D Heavy:** Configured to utilize the 64k context window of Node D for deep orchestration.
 
 ### 2. Lossless Memory (LCM)
-Native integration with `hermes-lcm`, utilizing SQLite-based DAG summaries to prevent context window degradation during 1M+ token missions.
+Native integration with **[Hermes-LCM](https://github.com/stephenschoettler/hermes-lcm)**, utilizing SQLite-based DAG summaries to prevent context window degradation during 1M+ token missions.
 
 ### 3. Pluggable Provider Adapter
 Hardened the core `auxiliary_client.py` with a `PluggableAuxiliaryClient` layer, allowing any mesh-native binary to be used as a first-class inference provider.
