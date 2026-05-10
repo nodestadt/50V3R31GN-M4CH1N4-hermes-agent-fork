@@ -18,6 +18,7 @@ import json
 import logging
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
 
@@ -96,6 +97,7 @@ class N8nClient:
         Returns:
             Workflow object dict.
         """
+        self._validate_id(workflow_id, "workflow_id")
         return self._api_get(f"/workflows/{workflow_id}")
 
     def activate_workflow(self, workflow_id: str) -> Dict[str, Any]:
@@ -107,6 +109,7 @@ class N8nClient:
         Returns:
             Updated workflow object.
         """
+        self._validate_id(workflow_id, "workflow_id")
         return self._api_post(f"/workflows/{workflow_id}/activate")
 
     def deactivate_workflow(self, workflow_id: str) -> Dict[str, Any]:
@@ -118,6 +121,7 @@ class N8nClient:
         Returns:
             Updated workflow object.
         """
+        self._validate_id(workflow_id, "workflow_id")
         return self._api_post(f"/workflows/{workflow_id}/deactivate")
 
     def execute_workflow(
@@ -142,6 +146,7 @@ class N8nClient:
         body: Dict[str, Any] = {}
         if data:
             body["pinData"] = data
+        self._validate_id(workflow_id, "workflow_id")
         return self._api_post(f"/workflows/{workflow_id}/run", body=body or None)
 
     def list_executions(
@@ -181,11 +186,20 @@ class N8nClient:
         Returns:
             Execution object dict.
         """
+        self._validate_id(execution_id, "execution_id")
         return self._api_get(f"/executions/{execution_id}")
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_id(value: str, name: str) -> str:
+        """Validate that an ID contains only safe characters."""
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', value):
+            raise N8nApiError(f"Invalid {name}: must be alphanumeric with hyphens/underscores only")
+        return value
 
     def _api_url(self, path: str) -> str:
         """Build a full API URL from a relative path."""
@@ -195,7 +209,7 @@ class N8nClient:
         """Perform an authenticated GET to the n8n API."""
         url = self._api_url(path)
         if params:
-            qs = "&".join(f"{k}={v}" for k, v in params.items())
+            qs = urllib.parse.urlencode(params)
             url = f"{url}?{qs}"
         return self._request("GET", url)
 
