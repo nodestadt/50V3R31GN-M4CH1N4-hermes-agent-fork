@@ -1028,6 +1028,7 @@ plugins:
   enabled:
     - telegram-artery
     - n8n-mcp
+    - mirage-vfs
   telegram_artery:
     # bot_token: ""  # Set TELEGRAM_ARTERY_BOT_TOKEN env var instead
     primary_node: "node_d"           # Reasoning node (100.120.225.12)
@@ -1047,4 +1048,15 @@ plugins:
     max_retries: 3
     retry_delay_seconds: 1.0
     verify_ssl: true
+
+  # Mirage VFS — virtualized filesystem bridge on Node D (Heavy-Hitter)
+  # Presents Redis (Node A) and S3 as local files via FUSE mount.
+  # Tools: mirage_health_check, mirage_read_file, mirage_list_dir, mirage_write_file
+  mirage_vfs:
+    mount_point: "/mnt/mirage"                # FUSE mount on Node D
+    redis_host: "100.90.196.70"               # Node A (Synapse/Mooncake)
+    redis_port: 6379
+    s3_endpoint: "http://100.90.196.70:9000"  # Node A MinIO
+    s3_bucket: "sovereign-mirage"
+    health_check_on_start: true
 
