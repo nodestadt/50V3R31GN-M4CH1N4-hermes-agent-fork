@@ -24,7 +24,9 @@ class Node:
     port: int
     models: List[str]
     load: float = 0.0
-    last_pulse: float = 0.0
+    ram_usage: float = 0.0
+    vram_usage: float = 0.0
+    last_seen: float = 0.0
 
 
 class VSBPulse:
@@ -35,10 +37,10 @@ class VSBPulse:
     PULSE_INTERVAL = 2.0  # seconds
     PULSE_TIMEOUT = 10.0  # seconds
 
-    def __init__(self, bind_ip: str = "0.0.0.0"):
+    def __init__(self, nodes: List[Node], bind_ip: str = "0.0.0.0"):
         self.bind_ip = bind_ip
+        self.nodes = nodes
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.nodes: Dict[str, Node] = {}
 
     def start(self):
         """Start pulse listener."""
@@ -62,17 +64,38 @@ class VSBPulse:
         except Exception as e:
             logger.error(f"Error sending pulse to {target_ip}: {e}")
 
-    def recv_pulse(self, timeout: float = 1.0) -> Optional[tuple]:
-        """Receive pulse from any node."""
+    def listen(self, timeout: float = 1.0) -> Optional[tuple]:
+        """Listen for pulse from any node."""
         self.sock.settimeout(timeout)
         try:
             data, addr = self.sock.recvfrom(302)
             return (data, addr)
-        except socket.timeout:
+        except (socket.timeout, BlockingIOError):
             return None
         except Exception as e:
             logger.error(f"Error receiving pulse: {e}")
             return None
+
+    def recv_pulse(self, data, addr):
+        """Unpack pulse and update node metrics."""
+        if len(data) < 302:
+            return
+
+        try:
+            header, version, node_id, load, ram, vram = struct.unpack("!3sBBfff", data[:17])
+            if header != b"VSB" or version != 3:
+                return
+
+            ip = addr[0]
+            for node in self.nodes:
+                if node.ip == ip:
+                    node.load = load
+                    node.ram_usage = ram
+                    node.vram_usage = vram
+                    node.last_seen = time.time()
+                    break
+        except Exception as e:
+            logger.error(f"Failed to unpack pulse: {e}")
 
 
 class VSBRouter:
@@ -81,7 +104,7 @@ class VSBRouter:
     """
     def __init__(self, nodes: List[Node]):
         self.nodes = {n.id: n for n in nodes}
-        self.pulse = VSBPulse()
+        self.pulse = VSBPulse(nodes)
         self.running = False
 
     def select_node(self, model: str) -> Optional[Node]:
@@ -222,12 +245,11 @@ class VSBRouter:
             while self.running:
                 try:
                     # Check for pulses from all nodes
-                    pulse = self.pulse.recv_pulse(timeout=1.0)
-                    if pulse:
-                        data, addr = pulse
-                        # Parse 302-byte pulse (simplified)
-                        # Real implementation: struct unpack with node_id, load, models
-                        logger.debug(f"Pulse received from {addr[0]}:{addr[1]}")
+                    pulse_data = self.pulse.listen(timeout=1.0)
+                    if pulse_data:
+                        data, addr = pulse_data
+                        self.pulse.recv_pulse(data, addr)
+                        logger.debug(f"Pulse received and unpacked from {addr[0]}:{addr[1]}")
                 except Exception as e:
                     logger.error(f"Pulse loop error: {e}")
 
