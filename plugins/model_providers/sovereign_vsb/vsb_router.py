@@ -11,7 +11,7 @@ import os
 import socket
 import struct
 import time
-import asyncio
+import threading
 import httpx
 import json
 import re
@@ -271,34 +271,31 @@ class VSBRouter:
         }
 
     def start_pulse_sync(self):
-        """Start background pulse sync."""
+        """Start background pulse sync in a daemon thread."""
         self.pulse.start()
         self.running = True
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        async def _pulse_loop():
+        def _pulse_loop():
             while self.running:
                 try:
-                    # Check for pulses from all nodes
                     pulse_data = self.pulse.listen(timeout=1.0)
                     if pulse_data:
                         data, addr = pulse_data
                         self.pulse.recv_pulse(data, addr)
-                        logger.debug(f"Pulse received and unpacked from {addr[0]}:{addr[1]}")
+                        logger.debug(f"Pulse received from {addr[0]}:{addr[1]}")
                 except Exception as e:
                     logger.error(f"Pulse loop error: {e}")
 
-                await asyncio.sleep(0.5)
-
-        logger.info("VSB background pulse sync started")
-        loop.run_until_complete(_pulse_loop())
+        self._pulse_thread = threading.Thread(target=_pulse_loop, daemon=True, name="vsb-pulse")
+        self._pulse_thread.start()
+        logger.info("VSB background pulse sync started (daemon thread)")
 
     def stop(self):
         """Stop router and pulse sync."""
         logger.info("Stopping VSB router and pulse sync")
         self.running = False
+        if hasattr(self, '_pulse_thread') and self._pulse_thread is not None:
+            self._pulse_thread.join(timeout=3.0)
 
 
 # Mesh node configuration (Tailscale Artery)
