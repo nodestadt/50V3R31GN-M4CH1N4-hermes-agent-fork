@@ -161,6 +161,9 @@ class StreamingHandler:
             chat_id, state.step_count,
         )
 
+        # Evict finalized stream to prevent unbounded memory growth
+        self._active_streams.pop(chat_id, None)
+
     def get_stream_state(self, chat_id: int) -> Optional[StreamState]:
         """Return the current StreamState for a chat, if any."""
         return self._active_streams.get(chat_id)

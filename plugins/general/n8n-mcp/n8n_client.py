@@ -52,6 +52,7 @@ class N8nClient:
 
     def __init__(self, config: N8nConfig):
         self._config = config
+        self._ssl_ctx = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -299,17 +300,25 @@ class N8nClient:
         )
 
     def _backoff(self, attempt: int) -> None:
-        """Sleep with exponential backoff after a failed attempt."""
-        delay = self._config.retry_delay_seconds * (2 ** attempt)
+        """Sleep with exponential backoff after a failed attempt.
+
+        Caps delay at 30 seconds to avoid impractical waits.
+        """
+        max_delay = 30.0
+        delay = min(self._config.retry_delay_seconds * (2 ** attempt), max_delay)
         logger.debug("Retry %d: waiting %.1fs", attempt + 1, delay)
         time.sleep(delay)
 
     def _ssl_context(self):
-        """Build an SSL context based on configuration."""
+        """Build an SSL context based on configuration (cached)."""
+        if self._ssl_ctx is not None:
+            return self._ssl_ctx
+
         import ssl
 
         ctx = ssl.create_default_context()
         if not self._config.verify_ssl:
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
+        self._ssl_ctx = ctx
         return ctx

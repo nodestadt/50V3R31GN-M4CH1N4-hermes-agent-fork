@@ -13,9 +13,7 @@ Tools exposed:
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -189,34 +187,33 @@ class VfsBridge:
         full_path = self._mount_point / rel_path
 
         try:
-            if not full_path.exists():
-                return {
-                    "success": False,
-                    "error": f"File not found: {rel_path}",
-                    "path": rel_path,
-                }
-
-            content = full_path.read_text(encoding="utf-8")
+            data = full_path.read_bytes()
             stat = full_path.stat()
 
-            return {
-                "success": True,
-                "path": rel_path,
-                "content": content,
-                "size_bytes": stat.st_size,
-                "modified": stat.st_mtime,
-            }
-        except UnicodeDecodeError:
-            # Binary file — return base64
-            import base64
+            try:
+                content = data.decode("utf-8")
+                return {
+                    "success": True,
+                    "path": rel_path,
+                    "content": content,
+                    "size_bytes": stat.st_size,
+                    "modified": stat.st_mtime,
+                }
+            except UnicodeDecodeError:
+                import base64
 
-            data = full_path.read_bytes()
+                return {
+                    "success": True,
+                    "path": rel_path,
+                    "content_b64": base64.b64encode(data).decode("ascii"),
+                    "size_bytes": len(data),
+                    "binary": True,
+                }
+        except FileNotFoundError:
             return {
-                "success": True,
+                "success": False,
+                "error": f"File not found: {rel_path}",
                 "path": rel_path,
-                "content_b64": base64.b64encode(data).decode("ascii"),
-                "size_bytes": len(data),
-                "binary": True,
             }
         except PermissionError:
             return {

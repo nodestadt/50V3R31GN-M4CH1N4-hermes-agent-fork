@@ -230,6 +230,8 @@ class BotCoordinator:
             logger.error("Error for chat_id=%s: %s", chat_id, exc)
         finally:
             session.is_active = False
+            # Evict completed session to prevent unbounded growth
+            self._sessions.pop(session_id, None)
 
         return result
 
