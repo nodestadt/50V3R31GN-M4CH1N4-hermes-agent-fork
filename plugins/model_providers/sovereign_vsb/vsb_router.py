@@ -6,6 +6,8 @@ Core design:
 - UDP pulse for state sync (302-byte packets)
 - TokenSpeed backend for fast inference
 """
+import hmac
+import hashlib
 import logging
 import os
 import socket
@@ -41,9 +43,10 @@ class VSBPulse:
     PULSE_INTERVAL = 2.0  # seconds
     PULSE_TIMEOUT = 10.0  # seconds
 
-    def __init__(self, nodes: List[Node], bind_ip: str = "0.0.0.0"):
+    def __init__(self, nodes: List[Node], bind_ip: str = "0.0.0.0", secret: str = ""):
         self.bind_ip = bind_ip
         self.nodes = nodes
+        self.secret = secret.encode() if secret else b""
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def start(self):
@@ -57,10 +60,15 @@ class VSBPulse:
             raise
 
     def send_pulse(self, target_ip: str, payload: bytes):
-        """Send 302-byte pulse to node."""
+        """Send authenticated 302-byte pulse to node."""
         if len(payload) != 302:
-            logger.error(f"Pulse invalid size: {len(payload)} bytes (must be exactly 302)")
+            logger.error(f"Pulse invalid size: {len(payload)} bytes")
             raise ValueError("Pulse must be exactly 302 bytes")
+
+        # Append HMAC-SHA256 signature (32 bytes) — last 32 bytes of packet
+        if self.secret:
+            sig = hmac.new(self.secret, payload[:270], hashlib.sha256).digest()
+            payload = payload[:270] + sig
 
         try:
             self.sock.sendto(payload, (target_ip, self.PORT))
@@ -81,9 +89,17 @@ class VSBPulse:
             return None
 
     def recv_pulse(self, data, addr):
-        """Unpack pulse and update node metrics."""
+        """Unpack and authenticate pulse, then update node metrics."""
         if len(data) < 302:
             return
+
+        # Verify HMAC signature (last 32 bytes)
+        if self.secret:
+            expected_sig = hmac.new(self.secret, data[:270], hashlib.sha256).digest()
+            received_sig = data[270:302]
+            if not hmac.compare_digest(expected_sig, received_sig):
+                logger.warning(f"Pulse authentication failed from {addr[0]}")
+                return
 
         try:
             header, version, node_id, load, ram, vram = struct.unpack("!3sBBfff", data[:17])
@@ -108,8 +124,6 @@ class VSBRouter:
     """
     def __init__(self, nodes: List[Node]):
         self.nodes = {n.id: n for n in nodes}
-        self.pulse = VSBPulse(nodes)
-        self.running = False
         secret = os.getenv("SOVEREIGN_MESH_SECRET")
         if not secret:
             raise EnvironmentError(
@@ -117,6 +131,8 @@ class VSBRouter:
                 "Set it to the mesh shared secret before starting the VSB router."
             )
         self.secret_key = secret
+        self.pulse = VSBPulse(nodes, secret=self.secret_key)
+        self.running = False
 
     def select_node(self, model: str) -> Optional[Node]:
         """
