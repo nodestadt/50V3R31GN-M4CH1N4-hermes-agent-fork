@@ -102,7 +102,6 @@ class N8nMcpBridge:
         workflow_id: str,
         *,
         data: Optional[Dict[str, Any]] = None,
-        wait_for_result: bool = False,
     ) -> str:
         """Execute an n8n workflow with optional input data.
 
@@ -111,7 +110,6 @@ class N8nMcpBridge:
         Args:
             workflow_id: The n8n workflow ID to execute.
             data: Optional input data forwarded to the workflow.
-            wait_for_result: Unused — n8n ``/run`` is synchronous.
         """
         if not workflow_id:
             return json.dumps({"error": "workflow_id is required"})

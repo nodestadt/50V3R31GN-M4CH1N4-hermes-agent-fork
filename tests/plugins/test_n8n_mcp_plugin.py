@@ -481,7 +481,7 @@ class TestN8nMcpPlugin(unittest.TestCase):
         plugin.on_session_end(session_id="test-session")
 
     def test_register_entry_point(self):
-        """register() registers hooks with the Hermes plugin API."""
+        """register() registers tools and hooks with the Hermes plugin API."""
         plugin_config = {"n8n_base_url": "http://test:5678"}
 
         ctx = MagicMock()
@@ -489,6 +489,19 @@ class TestN8nMcpPlugin(unittest.TestCase):
 
         register_fn = plugin_init_mod.register
         register_fn(ctx)
+
+        # Verify tools were registered (4 tools from get_tool_definitions)
+        tool_calls = ctx.register_tool.call_args_list
+        tool_names = [call.kwargs["name"] for call in tool_calls]
+        self.assertEqual(len(tool_names), 4)
+        self.assertIn("n8n_health_check", tool_names)
+        self.assertIn("n8n_list_workflows", tool_names)
+        self.assertIn("n8n_execute_workflow", tool_names)
+        self.assertIn("n8n_get_execution", tool_names)
+
+        # Verify toolset is correct
+        for call in tool_calls:
+            self.assertEqual(call.kwargs["toolset"], "n8n-mcp")
 
         # Verify hooks were registered
         register_calls = ctx.register_hook.call_args_list

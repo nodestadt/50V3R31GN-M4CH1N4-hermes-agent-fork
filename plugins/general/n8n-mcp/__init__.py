@@ -143,6 +143,18 @@ def register(ctx: Any) -> None:
     plugin = N8nMcpPlugin(plugin_config)
     plugin.initialize(ctx)
 
+    # Register MCP tools with Hermes
+    if plugin.mcp_bridge:
+        for tool_def in plugin.mcp_bridge.get_tool_definitions():
+            ctx.register_tool(
+                name=tool_def["name"],
+                toolset=PLUGIN_NAME,
+                schema=tool_def["inputSchema"],
+                handler=tool_def["handler"],
+                check_fn=lambda: True,
+                emoji="🔗",
+            )
+
     # Register hook callbacks
     ctx.register_hook("on_session_start", plugin.on_session_start)
     ctx.register_hook("on_session_end", plugin.on_session_end)
