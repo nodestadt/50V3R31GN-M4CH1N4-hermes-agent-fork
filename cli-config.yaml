@@ -1011,3 +1011,30 @@ mcp_servers:
   consensus-alignment:
     command: "consensus-alignment"
 
+# =============================================================================
+# Sovereign Telegram AI Artery (Phase 5 — Incremental Appendages)
+# =============================================================================
+# Telegram bot plugin for the Sovereign mesh.  Enables:
+#   1. Real-time token streaming (Thought Visualization) from Node D reasoning
+#      into Telegram as monospaced code blocks via progressive message edits.
+#   2. Bot-to-bot coordination between Node C (perception) and Node D (reasoning)
+#      for autonomous handoff between specialized vision and text agents.
+#   3. Tailscale Artery integration for secure inter-node communication.
+#
+# Bot token: set TELEGRAM_ARTERY_BOT_TOKEN in .env or configure below.
+# Verify with: curl https://api.telegram.org/bot<token>/getMe
+#
+plugins:
+  enabled:
+    - telegram-artery
+  telegram_artery:
+    # bot_token: ""  # Set TELEGRAM_ARTERY_BOT_TOKEN env var instead
+    primary_node: "node_d"           # Reasoning node (100.120.225.12)
+    perception_node: "node_c"        # Perception node (100.102.109.81)
+    stream_chunk_size: 40            # Characters per streaming flush
+    stream_interval: 0.3             # Seconds between progressive edits
+    enable_bot_coordination: true    # Bot-to-bot handoff active
+    coordination_timeout: 30.0       # Seconds before handoff timeout
+    monospace_blocks: true           # Monospaced reasoning formatting
+    max_message_length: 4096         # Telegram message length limit
+

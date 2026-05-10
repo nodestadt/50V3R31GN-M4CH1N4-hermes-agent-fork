@@ -1,0 +1,50 @@
+name: telegram-artery
+type: general-hook
+version: 1.0.0
+description: >
+  Sovereign Machina Telegram AI Artery — Real-time token streaming (Thought
+  Visualization) from Node D reasoning into Telegram as monospaced code blocks,
+  plus bot-to-bot coordination between Node C (perception) and Node D (reasoning)
+  via the Tailscale Zero-Trust Artery.
+authors:
+  - Sovereign Machina
+tags:
+  - telegram
+  - streaming
+  - coordination
+  - artery
+  - sovereign-mesh
+hooks:
+  - transform_llm_output
+  - on_session_start
+  - on_session_end
+  - post_tool_call
+config:
+  bot_token:
+    type: string
+    description: "Telegram bot API token (or set TELEGRAM_ARTERY_BOT_TOKEN env var)"
+    required: true
+  primary_node:
+    type: string
+    description: "Mesh node for reasoning (default: node_d)"
+    default: "node_d"
+  perception_node:
+    type: string
+    description: "Mesh node for perception (default: node_c)"
+    default: "node_c"
+  stream_chunk_size:
+    type: integer
+    description: "Characters per streaming chunk (default: 40)"
+    default: 40
+  stream_interval:
+    type: float
+    description: "Seconds between progressive Telegram edits (default: 0.3)"
+    default: 0.3
+  enable_bot_coordination:
+    type: boolean
+    description: "Enable bot-to-bot handoff between mesh nodes (default: true)"
+    default: true
+  monospace_blocks:
+    type: boolean
+    description: "Use monospaced formatting for reasoning blocks (default: true)"
+    default: true
