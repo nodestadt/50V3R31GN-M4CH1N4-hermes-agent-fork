@@ -19,8 +19,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Callable, Deque, Dict, Optional
+from dataclasses import dataclass
+from typing import Callable, Dict, Optional
 
 from .artery_config import ArteryConfig
 
@@ -31,7 +31,6 @@ CURSOR = " ▉"
 REASONING_PREFIX = "💭 Reasoning\n"
 CODE_FENCE = "```\n"
 CODE_FENCE_END = "\n```"
-THOUGHT_DELIMITER = "\n---\n"
 
 
 @dataclass
@@ -40,10 +39,8 @@ class StreamState:
     chat_id: int
     message_id: Optional[int] = None
     buffer: str = ""
-    reasoning_steps: Deque[str] = field(default_factory=lambda: __import__("collections").deque())
     last_edit_time: float = 0.0
     last_edit_len: int = 0
-    step_count: int = 0
     is_active: bool = True
     is_finalized: bool = False
 
@@ -134,9 +131,19 @@ class StreamingHandler:
             await self._flush(state)
 
     async def feed_tokens(self, tokens: str, chat_id: int) -> None:
-        """Feed a batch of tokens. Convenience wrapper around feed_token."""
-        for token in tokens:
-            await self.feed_token(token, chat_id)
+        """Feed a batch of tokens into the active stream."""
+        state = self._active_streams.get(chat_id)
+        if state is None or not state.is_active:
+            return
+
+        state.buffer += tokens
+
+        now = time.monotonic()
+        elapsed = now - state.last_edit_time
+        buffer_ready = len(state.buffer) - state.last_edit_len >= self.config.stream_chunk_size
+
+        if buffer_ready or elapsed >= self.config.stream_interval:
+            await self._flush(state)
 
     async def finalize_stream(self, chat_id: int) -> None:
         """Finalize the streaming session.
@@ -157,8 +164,8 @@ class StreamingHandler:
 
         state.is_finalized = True
         logger.info(
-            "Stream finalized for chat_id=%s, %d reasoning steps",
-            chat_id, state.step_count,
+            "Stream finalized for chat_id=%s, %d chars",
+            chat_id, len(state.buffer),
         )
 
         # Evict finalized stream to prevent unbounded memory growth
