@@ -11,11 +11,14 @@ Implementation: Simple, working, efficient.
 """
 import sqlite3
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 from agent.memory_provider import MemoryProvider
 from hermes_constants import get_hermes_home
+
+logger = logging.getLogger("hermes_lcm")
 
 
 class HermesLCMMemoryProvider(MemoryProvider):
@@ -44,6 +47,7 @@ class HermesLCMMemoryProvider(MemoryProvider):
         self.summary_interval = config.get("summary_interval", 32000)
 
         self._init_db()
+        self._conn = None
 
     def _init_db(self):
         """Initialize SQLite DAG schema."""
@@ -89,6 +93,15 @@ class HermesLCMMemoryProvider(MemoryProvider):
         conn.commit()
         conn.close()
 
+    def _get_conn(self) -> sqlite3.Connection:
+        """Get or create a persistent connection with proper settings."""
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path)
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA synchronous=NORMAL")
+            self._conn.execute("PRAGMA foreign_keys=ON")
+        return self._conn
+
     def store(self, session_id: str, content: dict) -> bool:
         """
         Store session content. Auto-summarize if needed.
@@ -118,7 +131,7 @@ class HermesLCMMemoryProvider(MemoryProvider):
 
         full_context = json.dumps(messages, ensure_ascii=False)
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         try:
             conn.execute("""
             INSERT INTO sessions (id, parent_id, summary, full_context, metadata,
@@ -138,10 +151,8 @@ class HermesLCMMemoryProvider(MemoryProvider):
             return True
         except Exception as e:
             conn.rollback()
-            print(f"[LCM Error] Failed to store {session_id}: {e}")
+            logger.error("Failed to store %s: %s", session_id, e)
             return False
-        finally:
-            conn.close()
 
     def query(self, query: str, limit: int = 10) -> List[Dict]:
         """
@@ -154,7 +165,7 @@ class HermesLCMMemoryProvider(MemoryProvider):
         Returns:
             List of {id, summary, metadata, created_at}
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         conn.row_factory = sqlite3.Row
 
         # Simple text search on summaries
@@ -166,8 +177,6 @@ class HermesLCMMemoryProvider(MemoryProvider):
         ORDER BY created_at DESC
         LIMIT ?
         """, (f"%{query}%", f"%{query}%", limit)).fetchall()
-
-        conn.close()
 
         return [dict(r) for r in results]
 
@@ -185,7 +194,7 @@ class HermesLCMMemoryProvider(MemoryProvider):
         if max_tokens is None:
             max_tokens = self.max_context_tokens
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         conn.row_factory = sqlite3.Row
 
         # Get current session
@@ -196,7 +205,6 @@ class HermesLCMMemoryProvider(MemoryProvider):
         """, (session_id,)).fetchone()
 
         if not session:
-            conn.close()
             return []
 
         messages = []
@@ -204,7 +212,11 @@ class HermesLCMMemoryProvider(MemoryProvider):
 
         # Include current session messages first
         full_context = json.loads(session["full_context"])
-        messages.extend(full_context[::-max_tokens:])  # Truncate if huge
+        # Take last N messages to fit within context window
+        if len(full_context) > max_tokens:
+            messages.extend(full_context[-max_tokens:])
+        else:
+            messages.extend(full_context)
         tokens_used += min(session["token_count"], max_tokens)
 
         # Walk up DAG for more context
@@ -230,7 +242,6 @@ class HermesLCMMemoryProvider(MemoryProvider):
             else:
                 break
 
-        conn.close()
         return messages
 
     def _generate_summary(self, messages: List[Dict]) -> str:
