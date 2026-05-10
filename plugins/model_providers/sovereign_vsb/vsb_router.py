@@ -7,6 +7,7 @@ Core design:
 - TokenSpeed backend for fast inference
 """
 import logging
+import os
 import socket
 import struct
 import time
@@ -109,6 +110,7 @@ class VSBRouter:
         self.nodes = {n.id: n for n in nodes}
         self.pulse = VSBPulse(nodes)
         self.running = False
+        self.secret_key = os.getenv("SOVEREIGN_MESH_SECRET", "machina-sovereign-mesh-v3-secret-key")
 
     def select_node(self, model: str) -> Optional[Node]:
         """
@@ -164,7 +166,7 @@ class VSBRouter:
         }
         
         headers = {
-            "Authorization": "Bearer machina-sovereign-mesh-v3-secret-key"
+            "Authorization": f"Bearer {self.secret_key}"
         }
         
         logger.debug(f"Calling VSB backend: {url} (stream={stream})")
