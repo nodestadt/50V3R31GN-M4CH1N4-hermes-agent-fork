@@ -1,133 +1,78 @@
 """
-Psy-core Hook - Transform LLM output for cryptographic vetting.
+Psy-core Hook — Tool execution allowlist and audit logging.
 
-Core design:
-- Validate tool signatures
-- Check execution permissions
-- Audit logging
+Replaces fake cryptographic signatures with a simple tool allowlist.
+All tool calls are logged for audit trail using Python's logging module.
 """
 import json
-import hashlib
-from typing import Dict, List, Any
+import logging
+from typing import Dict, List
 from datetime import datetime
+
+logger = logging.getLogger("psy_core")
+
+# Simple allowlist of permitted tools (replaces fake signature system)
+ALLOWED_TOOLS = frozenset({
+    "browser",
+    "code_interpreter",
+    "kanban_tools",
+})
 
 
 class PsyCoreHook:
-    """
-    Psy-core cryptographic audit hook.
-    """
-
-    # Trusted tool signatures (simplified - would be in DB)
-    TRUSTED_SIGNATURES = {
-        "browser": "a1b2c3d4",
-        "code_interpreter": "e5f6g7h8",
-        "kanban_tools": "i9j0k1l2",
-    }
+    """Tool allowlist and audit hook for Hermes."""
 
     def __init__(self, config: dict):
-        """
-        Initialize Psy-core hook.
-
-        Config:
-        - strict_mode: Block unverified tool calls (default: True)
-        - audit_log_path: Path to audit log (default: ~/.hermes/psy-audit.log)
-        """
-        self.config = config
         self.strict_mode = config.get("strict_mode", True)
-        self.audit_log_path = config.get("audit_log_path", "/tmp/psy-audit.log")
+        self.audit_log_path = config.get("audit_log_path")
+
+        # Set up file-based audit logging if path configured
+        if self.audit_log_path:
+            handler = logging.FileHandler(self.audit_log_path)
+            handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
+            logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
 
     def transform_llm_output(self, output: str) -> str:
-        """
-        Transform LLM output for cryptographic vetting.
-
-        Args:
-            output: Raw LLM output with tool calls
-
-        Returns:
-            Vetted output (same or with tool calls blocked)
-        """
-        # Parse tool calls (simplified - real implementation would parse structured format)
+        """Transform LLM output, blocking unauthorized tool calls."""
         tool_calls = self._parse_tool_calls(output)
 
         for tool_call in tool_calls:
             tool_name = tool_call.get("name", "")
 
-            # Validate signature
-            signature = self._calculate_signature(tool_name)
-            trusted_sig = self.TRUSTED_SIGNATURES.get(tool_name)
-
-            if signature != trusted_sig:
-                self._log_audit(tool_name, signature, "SIGNATURE_MISMATCH")
-
+            if tool_name not in ALLOWED_TOOLS:
+                logger.warning("BLOCKED tool: %s (not in allowlist)", tool_name)
                 if self.strict_mode:
-                    # Block tool call
-                    output = output.replace(str(tool_call), "[BLOCKED TOOL: Signature mismatch]")
-                else:
-                    # Allow with warning
-                    self._log_audit(tool_name, signature, "UNVERIFIED_TOOL_ALLOWED")
+                    output = output.replace(
+                        str(tool_call),
+                        f"[BLOCKED: {tool_name} not in allowlist]",
+                    )
             else:
-                self._log_audit(tool_name, signature, "VERIFIED")
+                logger.info("ALLOWED tool: %s", tool_name)
 
         return output
 
     def _parse_tool_calls(self, output: str) -> List[Dict]:
-        """
-        Parse tool calls from LLM output.
-
-        Simplified - real implementation would parse proper format.
-        """
-        # Placeholder: look for "call_tool" patterns
+        """Parse tool calls from LLM output."""
         tool_calls = []
-
         if "call_tool" in output:
-            # Extract tool name (simplified)
             lines = output.split("\n")
             for line in lines:
                 if "call_tool" in line and "{" in line:
                     try:
-                        # Extract JSON
                         json_start = line.find("{")
-                        json_str = line[json_start:]
-                        data = json.loads(json_str)
-
+                        data = json.loads(line[json_start:])
                         tool_calls.append({
                             "name": data.get("tool", ""),
                             "args": data.get("args", {}),
                         })
-                    except:
-                        pass
-
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.debug("Failed to parse tool call: %s", e)
         return tool_calls
-
-    def _calculate_signature(self, tool_name: str) -> str:
-        """
-        Calculate tool signature (SHA256).
-
-        Simplified - real implementation would use proper key.
-        """
-        return hashlib.sha256(tool_name.encode()).hexdigest()[:8]
-
-    def _log_audit(self, tool_name: str, signature: str, status: str):
-        """
-        Log tool call for audit trail.
-        """
-        timestamp = datetime.now().isoformat()
-
-        log_entry = f"{timestamp} | {tool_name} | {signature} | {status}\n"
-
-        with open(self.audit_log_path, "a") as f:
-            f.write(log_entry)
-
-        print(f"[Psy-core] Audit: {tool_name} = {status}")
 
 
 def register_hooks(plugin_api):
-    """
-    Register Psy-core hooks with Hermes.
-    """
+    """Register Psy-core hooks with Hermes."""
     hook = PsyCoreHook(plugin_api.config)
-
-    # Register transform_llm_output hook
     plugin_api.register_hook("transform_llm_output", hook.transform_llm_output)
-
-    print("[Psy-core] Cryptographic audit hook registered")
+    logger.info("Psy-core audit hook registered (allowlist mode)")
