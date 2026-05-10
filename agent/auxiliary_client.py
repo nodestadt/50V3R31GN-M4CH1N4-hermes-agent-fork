@@ -2847,30 +2847,28 @@ def resolve_provider_client(
         return (_to_async_client(client, final_model, is_vision=is_vision) if async_mode
                 else (client, final_model))
 
-    # ── Sovereign VSB (Mesh Router) ──────────────────────────
-    if provider == "sovereign-vsb":
+    # ── Pluggable Providers (via ProviderProfile) ────────────
+    from providers import get_provider_profile
+    _profile = get_provider_profile(provider)
+    if _profile and hasattr(_profile, "provider_class"):
         try:
-            from providers import get_provider_profile
-            profile = get_provider_profile("sovereign-vsb")
-            # The profile import will trigger the registration of SovereignVSBProvider
-            from plugins.model_providers.sovereign_vsb.provider import SovereignVSBProvider
-            
-            config = profile.config if (profile and hasattr(profile, "config")) else {}
-            # Ensure mesh_nodes are available from config.yaml
-            if not config.get("mesh_nodes"):
+            # Try to get provider-specific config from main runtime or profile
+            config = getattr(_profile, "config", {})
+            if not config or not config.get("mesh_nodes"):
+                # Fallback to loading from main config
                 from hermes_cli.config import load_config
                 h_config = load_config()
-                config = h_config.get("model_providers", {}).get("sovereign-vsb", {}).get("config", {})
-
-            vsb_instance = SovereignVSBProvider(config)
-            client = PluggableAuxiliaryClient(vsb_instance, base_url=getattr(profile, "base_url", ""))
-            final_model = model or getattr(profile, "default_model", "carnice-v2-27b")
+                config = h_config.get("model_providers", {}).get(provider, {}).get("config", {})
+            
+            provider_instance = _profile.provider_class(config)
+            client = PluggableAuxiliaryClient(provider_instance, base_url=getattr(_profile, "base_url", ""))
+            final_model = model or getattr(_profile, "default_model", "carnice-v2-27b")
             
             if async_mode:
                 return AsyncPluggableAuxiliaryClient(client), final_model
             return client, final_model
         except Exception as e:
-            logger.error(f"Failed to initialize Sovereign VSB: {e}")
+            logger.error(f"Failed to initialize pluggable provider {provider}: {e}")
             import traceback
             logger.error(traceback.format_exc())
             # Fall through to other providers

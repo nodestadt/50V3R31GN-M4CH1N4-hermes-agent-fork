@@ -59,6 +59,9 @@ class SovereignVSBProfile(ProviderProfile):
             logger.error(traceback.format_exc())
             return None
 
+# Import the actual provider class for registration if needed by the loader
+from .provider import SovereignVSBProvider
+
 sovereign_vsb = SovereignVSBProfile(
     name="sovereign-vsb",
     aliases=("vsb", "sovereign"),
@@ -76,8 +79,6 @@ sovereign_vsb = SovereignVSBProfile(
     ),
     default_max_tokens=32768,
 )
+sovereign_vsb.provider_class = SovereignVSBProvider
 
 register_provider(sovereign_vsb)
-
-# Import the actual provider class for registration if needed by the loader
-from .provider import SovereignVSBProvider
