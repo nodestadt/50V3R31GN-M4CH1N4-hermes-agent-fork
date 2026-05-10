@@ -1,7 +1,7 @@
 <div align="center">
 
 # ◈ ５０Ｖ３Ｒ３１ＧＮ－ＨＥＲＭＥＳ 
-> **The High-Performance Reasoning Core for the Nodestadt Mesh.**
+**The High-Performance Reasoning Core for the Nodestadt Mesh.**
 
 [![Status](https://img.shields.io/badge/status-BETA_V3_ACTIVE-success.svg)](https://github.com/nodestadt/50V3R31GN-M4CH1N4)
 [![Parent](https://img.shields.io/badge/parent-50V3R31GN--M4CH1N4-C7A87A.svg)](https://github.com/nodestadt/50V3R31GN-M4CH1N4)
