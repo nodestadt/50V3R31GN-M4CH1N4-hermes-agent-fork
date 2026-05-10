@@ -110,7 +110,13 @@ class VSBRouter:
         self.nodes = {n.id: n for n in nodes}
         self.pulse = VSBPulse(nodes)
         self.running = False
-        self.secret_key = os.getenv("SOVEREIGN_MESH_SECRET", "machina-sovereign-mesh-v3-secret-key")
+        secret = os.getenv("SOVEREIGN_MESH_SECRET")
+        if not secret:
+            raise EnvironmentError(
+                "SOVEREIGN_MESH_SECRET environment variable is required. "
+                "Set it to the mesh shared secret before starting the VSB router."
+            )
+        self.secret_key = secret
 
     def select_node(self, model: str) -> Optional[Node]:
         """
@@ -307,6 +313,11 @@ MESH_NODES = [
 def main():
     """Test VSB router."""
     logging.basicConfig(level=logging.DEBUG)
+    
+    if not os.getenv("SOVEREIGN_MESH_SECRET"):
+        os.environ["SOVEREIGN_MESH_SECRET"] = "test-secret-for-dev"
+        logger.warning("Using development SOVEREIGN_MESH_SECRET. Set the env var in production.")
+
     router = VSBRouter(MESH_NODES)
 
     # Start pulse sync
