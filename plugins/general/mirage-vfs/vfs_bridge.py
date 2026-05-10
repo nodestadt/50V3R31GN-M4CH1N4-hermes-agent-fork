@@ -13,7 +13,9 @@ Tools exposed:
 
 from __future__ import annotations
 
+import base64
 import logging
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -200,8 +202,6 @@ class VfsBridge:
                     "modified": stat.st_mtime,
                 }
             except UnicodeDecodeError:
-                import base64
-
                 return {
                     "success": True,
                     "path": rel_path,
@@ -354,8 +354,6 @@ class VfsBridge:
 
         # Fallback: check if mountpoint command succeeds
         try:
-            import subprocess
-
             result = subprocess.run(
                 ["mountpoint", "-q", str(self._mount_point)],
                 capture_output=True,
