@@ -132,6 +132,27 @@ class VfsBridge:
         ]
 
     # ------------------------------------------------------------------
+    # Path validation
+    # ------------------------------------------------------------------
+
+    def _validate_path(self, rel_path: str) -> Path:
+        """Validate that a relative path does not escape the mount point.
+
+        Resolves the path and verifies it stays within the FUSE mount.
+        Raises ValueError if path traversal is detected.
+        """
+        mount_resolved = self._mount_point.resolve()
+        full_path = (self._mount_point / rel_path).resolve()
+
+        if not str(full_path).startswith(str(mount_resolved)):
+            raise ValueError(
+                f"Path traversal blocked: '{rel_path}' escapes mount point "
+                f"'{self._mount_point}'"
+            )
+
+        return full_path
+
+    # ------------------------------------------------------------------
     # Tool handlers
     # ------------------------------------------------------------------
 
@@ -186,7 +207,11 @@ class VfsBridge:
             Dict with file content and metadata.
         """
         rel_path = kwargs.get("path", "")
-        full_path = self._mount_point / rel_path
+
+        try:
+            full_path = self._validate_path(rel_path)
+        except ValueError as exc:
+            return {"success": False, "error": str(exc), "path": rel_path}
 
         try:
             data = full_path.read_bytes()
@@ -238,7 +263,11 @@ class VfsBridge:
             Dict with directory listing.
         """
         rel_path = kwargs.get("path", "") or ""
-        full_path = self._mount_point / rel_path if rel_path else self._mount_point
+
+        try:
+            full_path = self._validate_path(rel_path) if rel_path else self._mount_point
+        except ValueError as exc:
+            return {"success": False, "error": str(exc), "path": rel_path or "/", "entries": []}
 
         try:
             if not full_path.exists():
@@ -309,7 +338,10 @@ class VfsBridge:
                 "error": "Path is required",
             }
 
-        full_path = self._mount_point / rel_path
+        try:
+            full_path = self._validate_path(rel_path)
+        except ValueError as exc:
+            return {"success": False, "error": str(exc), "path": rel_path}
 
         try:
             # Ensure parent directories exist
