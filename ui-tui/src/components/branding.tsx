@@ -53,7 +53,7 @@ export function Banner({ t }: { t: Theme }) {
         </Text>
       )}
 
-      <Text color={t.color.muted}>{t.brand.icon} Nous Research · Messenger of the Digital Gods</Text>
+      <Text color={t.color.muted}>{t.brand.icon} Sovereign Machina · Messenger of the Mesh</Text>
     </Box>
   )
 }
