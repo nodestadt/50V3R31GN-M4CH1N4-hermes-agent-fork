@@ -162,6 +162,42 @@ class SkinConfig:
 # =============================================================================
 
 _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
+    "sovereign": {
+        "name": "sovereign",
+        "description": "Sovereign Machina — Operational Lo-Fi Brutalism (v1.3.1)",
+        "colors": {
+            "banner_border": "#376374",    # Authority Primary (Tactical Teal)
+            "banner_title": "#836A46",     # Gold Highlight (Washed Bronze)
+            "banner_accent": "#376374",    # Section headers
+            "banner_dim": "#555555",       # Muted text
+            "banner_text": "#AFAB9C",      # Technical Gray (Parchment)
+            "ui_accent": "#376374",        # Tactical Teal
+            "ui_label": "#836A46",         # Washed Bronze labels
+            "ui_ok": "#4caf50",
+            "ui_error": "#ef5350",
+            "ui_warn": "#ffa726",
+            "prompt": "#AFAB9C",           # Technical Gray
+            "input_rule": "#376374",       # Tactical Teal rule
+            "response_border": "#836A46",  # Washed Bronze response
+            "status_bar_bg": "#1A282F",    # Tactical Base (Artery Blue)
+            "session_label": "#836A46",
+            "session_border": "#555555",
+        },
+        "branding": {
+            "agent_name": "Sovereign Hermes",
+            "welcome": "Sovereign Artery Active. High-level reasoning initialized.",
+            "goodbye": "Sovereign disconnect. Mesh persistence maintained. ⚕",
+            "response_label": " ⚕ SOVEREIGN ",
+            "prompt_symbol": "❯",
+            "help_header": "◈ Sovereign Commands",
+        },
+        "banner_logo": """[bold #836A46]██╗  ██╗███████╗██████╗ ███╗   ███╗███████╗███████╗       █████╗  ██████╗ ███████╗███╗   ██╗████████╗[/]
+[bold #836A46]██║  ██║██╔════╝██╔══██╗████╗ ████║██╔════╝██╔════╝      ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝[/]
+[#376374]███████║█████╗  ██████╔╝██╔████╔██║█████╗  ███████╗█████╗███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║[/]
+[#376374]██╔══██║██╔══╝  ██╔══██╗██║╚██╔╝██║██╔══╝  ╚════██║╚════╝██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║[/]
+[#376374]██║  ██║███████╗██║  ██║██║ ╚═╝ ██║███████╗███████║      ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║[/]
+[#376374]╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝""",
+    },
     "default": {
         "name": "default",
         "description": "Classic Hermes — gold and kawaii",
@@ -645,7 +681,7 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
 # =============================================================================
 
 _active_skin: Optional[SkinConfig] = None
-_active_skin_name: str = "default"
+_active_skin_name: str = "sovereign"
 
 
 def _skins_dir() -> Path:
@@ -735,9 +771,9 @@ def load_skin(name: str) -> SkinConfig:
     if name in _BUILTIN_SKINS:
         return _build_skin_config(_BUILTIN_SKINS[name])
 
-    # Fallback to default
-    logger.warning("Skin '%s' not found, using default", name)
-    return _build_skin_config(_BUILTIN_SKINS["default"])
+    # Fallback to sovereign
+    logger.warning("Skin '%s' not found, using sovereign", name)
+    return _build_skin_config(_BUILTIN_SKINS["sovereign"])
 
 
 def get_active_skin() -> SkinConfig:
@@ -769,11 +805,11 @@ def init_skin_from_config(config: dict) -> None:
     display = config.get("display") or {}
     if not isinstance(display, dict):
         display = {}
-    skin_name = display.get("skin", "default")
+    skin_name = display.get("skin", "sovereign")
     if isinstance(skin_name, str) and skin_name.strip():
         set_active_skin(skin_name.strip())
     else:
-        set_active_skin("default")
+        set_active_skin("sovereign")
 
 
 # =============================================================================
