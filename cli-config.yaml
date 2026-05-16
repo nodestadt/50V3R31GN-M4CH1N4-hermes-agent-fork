@@ -11,11 +11,11 @@ model:
   default: "carnice-v2-27b"
   
   # Inference provider selection:
-  provider: "sovereign-vsb"
+  provider: "openrouter"
   
   # API configuration (falls back to OPENROUTER_API_KEY env var)
   # api_key: "your-key-here"  # Uncomment to set here instead of .env
-  base_url: "http://100.120.225.12:8000"
+  # base_url: ""
 
   # ── Token limits — two settings, easy to confuse ──────────────────────────
   #
