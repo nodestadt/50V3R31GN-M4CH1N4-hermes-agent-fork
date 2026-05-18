@@ -85,9 +85,9 @@ class TestMirageVfsConfig(unittest.TestCase):
         """Config uses sensible defaults when no overrides provided."""
         cfg = MirageVfsConfig()
         self.assertEqual(cfg.mount_point, "/mnt/mirage")
-        self.assertEqual(cfg.redis_host, "100.90.196.70")
+        self.assertEqual(cfg.redis_host, "100.96.253.114")
         self.assertEqual(cfg.redis_port, 6379)
-        self.assertEqual(cfg.s3_endpoint, "http://100.90.196.70:9000")
+        self.assertEqual(cfg.s3_endpoint, "http://100.96.253.114:9000")
         self.assertEqual(cfg.s3_bucket, "sovereign-mirage")
         self.assertTrue(cfg.health_check_on_start)
 
@@ -134,7 +134,7 @@ class TestMirageVfsConfig(unittest.TestCase):
         """Empty dict falls back to defaults."""
         cfg = MirageVfsConfig.from_dict({})
         self.assertEqual(cfg.mount_point, "/mnt/mirage")
-        self.assertEqual(cfg.redis_host, "100.90.196.70")
+        self.assertEqual(cfg.redis_host, "100.96.253.114")
         self.assertEqual(cfg.redis_port, 6379)
 
     def test_config_is_frozen(self):
@@ -192,7 +192,7 @@ class TestVfsBridgeHealthCheck(unittest.TestCase):
         result = self.bridge._handle_health_check()
         self.assertFalse(result["mounted"])
         self.assertEqual(result["mount_point"], self.tmpdir)
-        self.assertEqual(result["redis_host"], "100.90.196.70")
+        self.assertEqual(result["redis_host"], "100.96.253.114")
 
     def test_health_check_nonexistent_mount(self):
         """Health check returns error for nonexistent mount point."""

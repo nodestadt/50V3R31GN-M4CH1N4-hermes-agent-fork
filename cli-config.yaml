@@ -1054,9 +1054,9 @@ plugins:
   # Tools: mirage_health_check, mirage_read_file, mirage_list_dir, mirage_write_file
   mirage_vfs:
     mount_point: "/mnt/mirage"                # FUSE mount on Node D
-    redis_host: "100.90.196.70"               # Node A (Synapse/Mooncake)
+    redis_host: "100.96.253.114"               # Node A (Synapse/Mooncake)
     redis_port: 6379
-    s3_endpoint: "http://100.90.196.70:9000"  # Node A MinIO
+    s3_endpoint: "http://100.96.253.114:9000"  # Node A MinIO
     s3_bucket: "sovereign-mirage"
     health_check_on_start: true
 

@@ -9,9 +9,9 @@ Hook points:
 
 Configuration (in cli-config.yaml under plugins.mirage_vfs):
   - mount_point: FUSE mount path (default: "/mnt/mirage")
-  - redis_host: Redis host — Node A IP (default: "100.90.196.70")
+  - redis_host: Redis host — Node A IP (default: "100.96.253.114")
   - redis_port: Redis port (default: 6379)
-  - s3_endpoint: S3 endpoint (default: "http://100.90.196.70:9000")
+  - s3_endpoint: S3 endpoint (default: "http://100.96.253.114:9000")
   - s3_bucket: S3 bucket name (default: "sovereign-mirage")
   - health_check_on_start: Run health check at session start (default: true)
 

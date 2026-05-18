@@ -5,7 +5,7 @@ description: >
   Mirage VFS Bridge — Presents external data sources (Redis, S3) as local
   files via a FUSE-mounted virtualized filesystem on Node D. Provides
   Hermes tools for transparent file I/O against mesh-wide backends:
-  Redis on Node A (100.90.196.70:6379) and S3-compatible storage on Node A.
+  Redis on Node A (100.96.253.114:6379) and S3-compatible storage on Node A.
 authors:
   - Sovereign Machina
 tags:
@@ -23,16 +23,16 @@ config:
     default: "/mnt/mirage"
   redis_host:
     type: string
-    description: "Redis host — Node A Tailnet IP (default: 100.90.196.70)"
-    default: "100.90.196.70"
+    description: "Redis host — Node A Tailnet IP (default: 100.96.253.114)"
+    default: "100.96.253.114"
   redis_port:
     type: integer
     description: "Redis port (default: 6379)"
     default: 6379
   s3_endpoint:
     type: string
-    description: "S3-compatible endpoint URL (default: http://100.90.196.70:9000)"
-    default: "http://100.90.196.70:9000"
+    description: "S3-compatible endpoint URL (default: http://100.96.253.114:9000)"
+    default: "http://100.96.253.114:9000"
   s3_bucket:
     type: string
     description: "S3 bucket name (default: sovereign-mirage)"

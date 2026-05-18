@@ -6,7 +6,7 @@ Loads configuration from:
   3. Sensible defaults for Node D deployment in Sovereign Mesh.
 
 Node topology:
-  - Node A (100.90.196.70): Redis, S3-compatible storage (MinIO)
+  - Node A (100.96.253.114): Redis, S3-compatible storage (MinIO)
   - Node D (100.120.225.12): Mirage mount point (/mnt/mirage)
 """
 
@@ -17,10 +17,10 @@ from dataclasses import dataclass
 
 
 DEFAULT_MOUNT_POINT = "/mnt/mirage"
-DEFAULT_REDIS_HOST = "100.90.196.70"
+DEFAULT_REDIS_HOST = "100.96.253.114"
 DEFAULT_REDIS_PORT = 6379
 DEFAULT_REDIS_KEY_PREFIX = "mirage:vfs:"
-DEFAULT_S3_ENDPOINT = "http://100.90.196.70:9000"
+DEFAULT_S3_ENDPOINT = "http://100.96.253.114:9000"
 DEFAULT_S3_BUCKET = "sovereign-mirage"
 DEFAULT_HEALTH_CHECK_ON_START = True
 
