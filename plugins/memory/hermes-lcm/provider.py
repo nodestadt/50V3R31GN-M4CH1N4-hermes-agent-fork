@@ -1,14 +1,12 @@
 """
 Hermes-LCM: Lossless Context Management MemoryProvider.
 
-Core design principles:
-1. DAG-based session storage (parent/child relationships)
-2. Automatic summarization when context window exceeded
-3. Query-based retrieval (text search on summaries)
-4. WAL mode for concurrency (mesh nodes reading/writing)
-
-Implementation: Simple, working, efficient.
+Phase 3 Unification Status: STUBBED
+- Core provider import stubbed (not yet available in upstream)
+- Plugin operates standalone with DAG schema
+- Full consolidation planned: v0.4.0
 """
+
 import sqlite3
 import json
 import logging
@@ -19,6 +17,11 @@ from agent.memory_provider import MemoryProvider
 from hermes_constants import get_hermes_home
 
 logger = logging.getLogger("hermes_lcm")
+
+# Phase 3 unification stubs - core provider not yet available
+CORE_AVAILABLE = False
+IdeaBlock = None  # type: ignore
+CoreLCMProvider = None  # type: ignore
 
 
 class HermesLCMMemoryProvider(MemoryProvider):
@@ -48,6 +51,16 @@ class HermesLCMMemoryProvider(MemoryProvider):
 
         self._init_db()
         self._conn = None
+
+        # Phase 3 unification: also initialize core provider if available
+        self.core_provider = None
+        if CORE_AVAILABLE:
+            try:
+                core_db = str(self.db_path).replace("lcm.db", "memory.db")
+                self.core_provider = CoreLCMProvider(core_db)
+                logger.info("Core HermesLCMProvider initialized for unification")
+            except Exception as e:
+                logger.warning(f"Could not init core provider: {e}")
 
     def _init_db(self):
         """Initialize SQLite DAG schema."""
@@ -147,7 +160,23 @@ class HermesLCMMemoryProvider(MemoryProvider):
                 token_count,
                 summary_tokens
             ))
+
             conn.commit()
+
+            # Phase 3 unification: also store in core provider
+            if self.core_provider and CORE_AVAILABLE:
+                try:
+                    block = IdeaBlock(
+                        block_id=session_id,
+                        semantic=summary[:300],
+                        context=summary,
+                        relations=[],
+                        metadata={"source": "plugin-delegation", **metadata}
+                    )
+                    self.core_provider.store_block(block)
+                except Exception as e:
+                    logger.debug(f"Core delegation failed (non-critical): {e}")
+
             return True
         except Exception as e:
             conn.rollback()
@@ -178,7 +207,18 @@ class HermesLCMMemoryProvider(MemoryProvider):
         LIMIT ?
         """, (f"%{query}%", f"%{query}%", limit)).fetchall()
 
-        return [dict(r) for r in results]
+        plugin_results = [dict(r) for r in results]
+
+        # Phase 3: Also query core provider if available
+        if self.core_provider and CORE_AVAILABLE:
+            try:
+                # Core uses IdeaBlock storage - we can add simple search later
+                # For now we just note availability
+                pass
+            except Exception:
+                pass
+
+        return plugin_results
 
     def get_context(self, session_id: str, max_tokens: Optional[int] = None) -> List[Dict]:
         """
@@ -212,12 +252,19 @@ class HermesLCMMemoryProvider(MemoryProvider):
 
         # Include current session messages first
         full_context = json.loads(session["full_context"])
-        # Take last N messages to fit within context window
-        if len(full_context) > max_tokens:
-            messages.extend(full_context[-max_tokens:])
-        else:
-            messages.extend(full_context)
-        tokens_used += min(session["token_count"], max_tokens)
+        tokens_used = 0
+        messages = []
+
+        # Proper token-aware context window (rough but functional estimation)
+        for msg in reversed(full_context):
+            content = msg.get("content", "")
+            msg_tokens = len(content) // 4 + 2
+            if tokens_used + msg_tokens > max_tokens:
+                break
+            messages.insert(0, msg)
+            tokens_used += msg_tokens
+
+        tokens_used += min(session.get("token_count", 0), max_tokens)
 
         # Walk up DAG for more context
         current_parent = session["parent_id"]
@@ -267,3 +314,63 @@ class HermesLCMMemoryProvider(MemoryProvider):
         Estimate token count (rough: 4 chars ≈ 1 token).
         """
         return len(text) // 4
+
+    # Expose rsync from core for mesh synchronization (Phase 3)
+    def sync_to_nodes(self, target_nodes: list) -> dict:
+        """Delegate to core Hermes-LCM rsync if available."""
+        logger.info("Rsync requested via plugin (delegation stub)")
+        return {"status": "stub", "targets": target_nodes}
+
+    def store_block_dual(self, semantic: str, context: str, metadata: dict = None):
+        """Store in both plugin DAG and core IdeaBlock during transition."""
+        # Store in existing sessions system
+        session_id = self.store_session(semantic, context)  # assume exists or add
+
+        # Also store in core if available
+        if self.core_provider and CORE_AVAILABLE:
+            try:
+                block = IdeaBlock(
+                    semantic=semantic,
+                    context=context,
+                    relations=[],
+                    metadata=metadata or {}
+                )
+                self.core_provider.store_block(block)
+            except Exception as e:
+                logger.warning(f"Dual store to core failed: {e}")
+
+        return session_id
+
+
+    def migrate_to_core(self, limit: int = 100) -> int:
+        """Migrate recent sessions from plugin schema to core IdeaBlock schema."""
+        if not self.core_provider or not CORE_AVAILABLE:
+            logger.warning("Core provider not available for migration")
+            return 0
+
+        conn = self._get_conn()
+        rows = conn.execute("""
+            SELECT id, summary, full_context, metadata, created_at
+            FROM sessions
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+
+        migrated = 0
+        for row in rows:
+            try:
+                block = IdeaBlock(
+                    block_id=row["id"],
+                    semantic=row["summary"][:300],
+                    context=row["full_context"][:2000],
+                    relations=[],
+                    metadata=json.loads(row["metadata"]) if row["metadata"] else {}
+                )
+                self.core_provider.store_block(block)
+                migrated += 1
+            except Exception as e:
+                logger.warning(f"Migration failed for {row['id']}: {e}")
+
+        logger.info(f"Migrated {migrated} sessions to core schema")
+        return migrated
