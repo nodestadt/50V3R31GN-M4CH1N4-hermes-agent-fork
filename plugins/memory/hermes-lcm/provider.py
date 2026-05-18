@@ -51,6 +51,7 @@ class HermesLCMMemoryProvider(MemoryProvider):
 
         self._init_db()
         self._conn = None
+        self._session_id = None
 
         # Phase 3 unification: also initialize core provider if available
         self.core_provider = None
@@ -61,6 +62,27 @@ class HermesLCMMemoryProvider(MemoryProvider):
                 logger.info("Core HermesLCMProvider initialized for unification")
             except Exception as e:
                 logger.warning(f"Could not init core provider: {e}")
+
+    # -- MemoryProvider abstract methods --
+
+    @property
+    def name(self) -> str:
+        return "hermes-lcm"
+
+    def is_available(self) -> bool:
+        """SQLite is always available."""
+        return True
+
+    def initialize(self, session_id: str, **kwargs) -> None:
+        """Initialize for a session."""
+        self._session_id = session_id
+        hermes_home = kwargs.get("hermes_home")
+        if hermes_home and not self.config.get("db_path"):
+            self.db_path = Path(hermes_home) / "lcm.db"
+
+    def get_tool_schemas(self) -> List[Dict[str, Any]]:
+        """LCM doesn't expose tools - it operates via hooks."""
+        return []
 
     def _init_db(self):
         """Initialize SQLite DAG schema."""
