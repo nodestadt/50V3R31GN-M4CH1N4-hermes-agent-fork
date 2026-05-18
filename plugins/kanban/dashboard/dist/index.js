@@ -1548,14 +1548,12 @@
           h("div", { className: "flex flex-col gap-1" },
             h(Label, { className: "text-xs text-muted-foreground" },
               "Orchestrator profile"),
-            h(Select, {
+            h(Select, Object.assign({
               value: settings.orchestrator_profile || "",
               className: "h-8",
-              onChange: function (e) {
-                const v = (e && e.target ? e.target.value : e) || "";
-                saveSettings({ orchestrator_profile: v });
-              },
-            },
+            }, selectChangeHandler(function (v) {
+              saveSettings({ orchestrator_profile: v });
+            })),
               h(SelectOption, { value: "" },
                 "(default: " + (settings.active_profile || "default") + ")"),
               profileOptions,
@@ -1566,14 +1564,12 @@
           h("div", { className: "flex flex-col gap-1" },
             h(Label, { className: "text-xs text-muted-foreground" },
               "Default assignee"),
-            h(Select, {
+            h(Select, Object.assign({
               value: settings.default_assignee || "",
               className: "h-8",
-              onChange: function (e) {
-                const v = (e && e.target ? e.target.value : e) || "";
-                saveSettings({ default_assignee: v });
-              },
-            },
+            }, selectChangeHandler(function (v) {
+              saveSettings({ default_assignee: v });
+            })),
               h(SelectOption, { value: "" },
                 "(default: " + (settings.active_profile || "default") + ")"),
               profileOptions,
@@ -1701,7 +1697,7 @@
     return h("div", { className: "hermes-kanban-boardswitcher" },
       h("div", { className: "hermes-kanban-boardswitcher-inner" },
         h("div", { className: "flex flex-col gap-0.5" },
-          h("div", { className: "text-[11px] uppercase tracking-wider text-muted-foreground" },
+          h("div", { className: "text-[11px] tracking-wider text-muted-foreground" },
             tx(t, "board", "Board")),
           h("div", { className: "flex items-center gap-2" },
             h(Select, Object.assign({
@@ -2027,11 +2023,10 @@
       ),
       h("div", { className: "hermes-kanban-bulk-reassign",
                  title: "Reassign selected tasks to a different Hermes profile. Pick a profile (or unassign) and click Apply." },
-        h(Select, {
+        h(Select, Object.assign({
           value: assignee,
-          onChange: function (e) { setAssignee(e.target.value); },
           className: "h-7 text-xs",
-        },
+        }, selectChangeHandler(setAssignee)),
           h(SelectOption, { value: "" }, "— reassign —"),
           h(SelectOption, { value: "__none__" }, "(unassign)"),
           props.assignees.map(function (a) {
@@ -2542,12 +2537,11 @@
         className: "h-7 text-xs",
       }),
       h("div", { className: "flex gap-2" },
-        h(Select, {
+        h(Select, Object.assign({
           value: workspaceKind,
-          onChange: function (e) { setWorkspaceKind(e.target.value); },
           title: "scratch: isolated temp dir (default). worktree: git worktree on the assignee profile. dir: exact path (required below).",
           className: "h-7 text-xs w-28",
-        },
+        }, selectChangeHandler(setWorkspaceKind)),
           h(SelectOption, { value: "scratch" }, "scratch"),
           h(SelectOption, { value: "worktree" }, "worktree"),
           h(SelectOption, { value: "dir" }, "dir"),
@@ -2559,12 +2553,11 @@
           className: "h-7 text-xs flex-1",
         }) : null,
       ),
-      h(Select, {
+      h(Select, Object.assign({
         value: parent,
-        onChange: function (e) { setParent(e.target.value); },
         className: "h-7 text-xs",
         title: "Optional parent task. A child stays blocked in its current column until the parent is marked done.",
-      },
+      }, selectChangeHandler(setParent)),
         h(SelectOption, { value: "" }, tx(t, "noParent", "— no parent —")),
         (props.allTasks || []).map(function (task) {
           return h(SelectOption, { key: task.id, value: task.id },

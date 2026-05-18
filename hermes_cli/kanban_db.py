@@ -2478,6 +2478,20 @@ def complete_task(
         }
         if verified_cards:
             completed_payload["verified_cards"] = verified_cards
+        # Carry artifact paths in the event payload so the gateway
+        # notifier can upload them as native attachments alongside the
+        # completion message. Workers pass these via
+        # ``kanban_complete(artifacts=[...])`` which stashes the list in
+        # ``metadata["artifacts"]`` — we promote it onto the event so
+        # consumers don't have to fetch the run row to find it.
+        if isinstance(metadata, dict):
+            md_artifacts = metadata.get("artifacts")
+            if isinstance(md_artifacts, (list, tuple)):
+                cleaned_artifacts = [
+                    str(p).strip() for p in md_artifacts if isinstance(p, str) and str(p).strip()
+                ]
+                if cleaned_artifacts:
+                    completed_payload["artifacts"] = cleaned_artifacts
         _append_event(
             conn, task_id, "completed",
             completed_payload,
@@ -2834,6 +2848,29 @@ def decompose_triage_task(
             if p == idx:
                 raise ValueError(f"child[{idx}] cannot list itself as a parent")
 
+    # Detect cycles in the sibling parent graph (Kahn's topological sort).
+    # link_tasks() calls _would_cycle() for every new edge; here we check
+    # the entire sibling graph before touching the DB.  A cycle silently
+    # deadlocks every involved child in 'todo' because recompute_ready()
+    # can never promote them.
+    _in_deg = [0] * len(children)
+    _adj: list[list[int]] = [[] for _ in range(len(children))]
+    for _i, _c in enumerate(children):
+        for _p in (_c.get("parents") or []):
+            _adj[_p].append(_i)
+            _in_deg[_i] += 1
+    _queue = [_i for _i in range(len(children)) if _in_deg[_i] == 0]
+    _seen = 0
+    while _queue:
+        _node = _queue.pop()
+        _seen += 1
+        for _nb in _adj[_node]:
+            _in_deg[_nb] -= 1
+            if _in_deg[_nb] == 0:
+                _queue.append(_nb)
+    if _seen != len(children):
+        raise ValueError("cyclic dependency detected in decomposed children list")
+
     # We do the full decomposition in a SINGLE write_txn so it's
     # atomic: either every child is created AND the root flips to
     # ``todo``, or nothing changes. We deliberately do NOT call any
@@ -3065,6 +3102,11 @@ DEFAULT_SPAWN_FAILURE_LIMIT = DEFAULT_FAILURE_LIMIT
 # Max bytes to keep in a single worker log file. The dispatcher truncates
 # and rotates on spawn if the file is larger than this at spawn time.
 DEFAULT_LOG_ROTATE_BYTES = 2 * 1024 * 1024   # 2 MiB
+DEFAULT_LOG_BACKUP_COUNT = 1
+
+# Keep a little wall-clock budget for the worker to observe a terminal timeout
+# and call kanban_block/kanban_complete before max_runtime_seconds kills it.
+KANBAN_TERMINAL_TIMEOUT_GRACE_SECONDS = 30
 
 
 @dataclass
@@ -4024,25 +4066,84 @@ def dispatch_once(
     return result
 
 
-def _rotate_worker_log(log_path: Path, max_bytes: int) -> None:
-    """Rotate ``<log>`` to ``<log>.1`` if it exceeds ``max_bytes``.
+def _positive_int(value: Any, default: int, *, minimum: int = 1) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed >= minimum else default
 
-    Single-generation rotation — one old file kept, newer one replaces it.
-    Keeps disk usage bounded while still giving the user a chance to grab
-    the prior run's output.
+
+def worker_log_rotation_config(kanban_cfg: Optional[dict] = None) -> tuple[int, int]:
+    """Return ``(rotate_bytes, backup_count)`` for worker log rotation.
+
+    Defaults preserve the historical behavior: rotate at 2 MiB and keep one
+    backup generation (``.log.1``). Operators with long-running workers can
+    raise either value from ``config.yaml`` without changing dispatcher code.
+    """
+    if kanban_cfg is None:
+        try:
+            from hermes_cli.config import load_config
+
+            kanban_cfg = (load_config().get("kanban") or {})
+        except Exception:
+            kanban_cfg = {}
+    max_bytes = _positive_int(
+        (kanban_cfg or {}).get("worker_log_rotate_bytes"),
+        DEFAULT_LOG_ROTATE_BYTES,
+        minimum=1,
+    )
+    backup_count = _positive_int(
+        (kanban_cfg or {}).get("worker_log_backup_count"),
+        DEFAULT_LOG_BACKUP_COUNT,
+        minimum=0,
+    )
+    return max_bytes, backup_count
+
+
+def _rotated_log_path(log_path: Path, generation: int) -> Path:
+    return log_path.with_suffix(log_path.suffix + f".{generation}")
+
+
+def _rotate_worker_log(
+    log_path: Path,
+    max_bytes: int,
+    backup_count: int = DEFAULT_LOG_BACKUP_COUNT,
+) -> None:
+    """Rotate ``<log>`` when it exceeds ``max_bytes``.
+
+    ``backup_count=1`` preserves the legacy single-generation behavior:
+    ``<log>`` moves to ``<log>.1`` and any previous ``.1`` is replaced.
+    Higher values shift older generations up to ``backup_count``.
     """
     try:
         if not log_path.exists():
             return
         if log_path.stat().st_size <= max_bytes:
             return
-        rotated = log_path.with_suffix(log_path.suffix + ".1")
+        backup_count = _positive_int(
+            backup_count,
+            DEFAULT_LOG_BACKUP_COUNT,
+            minimum=0,
+        )
+        if backup_count == 0:
+            log_path.unlink()
+            return
+        oldest = _rotated_log_path(log_path, backup_count)
         try:
-            if rotated.exists():
-                rotated.unlink()
+            if oldest.exists():
+                oldest.unlink()
         except OSError:
             pass
-        log_path.rename(rotated)
+        for generation in range(backup_count - 1, 0, -1):
+            src = _rotated_log_path(log_path, generation)
+            if not src.exists():
+                continue
+            try:
+                src.rename(_rotated_log_path(log_path, generation + 1))
+            except OSError:
+                pass
+        log_path.rename(_rotated_log_path(log_path, 1))
     except OSError:
         pass
 
@@ -4074,6 +4175,36 @@ def _resolve_hermes_argv() -> list[str]:
     # console-script target declared in pyproject.toml, NOT a top-level
     # ``hermes`` package — there is no ``hermes`` package to import.
     return [sys.executable, "-m", "hermes_cli.main"]
+
+
+def _worker_terminal_timeout_env(
+    max_runtime_seconds: Optional[int],
+    current_timeout: Optional[str],
+) -> Optional[str]:
+    """Return a worker-scoped TERMINAL_TIMEOUT override, if needed.
+
+    Kanban's ``max_runtime_seconds`` bounds the whole worker attempt. The
+    terminal tool has its own default timeout via ``TERMINAL_TIMEOUT``; when
+    the worker runtime is longer, raise only the child process default so a
+    long command is not killed by the generic terminal default first.
+    """
+    if max_runtime_seconds is None:
+        return None
+    try:
+        runtime = int(max_runtime_seconds)
+    except (TypeError, ValueError):
+        return None
+    if runtime <= 0:
+        return None
+
+    desired = max(1, runtime - KANBAN_TERMINAL_TIMEOUT_GRACE_SECONDS)
+    try:
+        existing = int(str(current_timeout).strip()) if current_timeout else 0
+    except (TypeError, ValueError):
+        existing = 0
+    if existing >= desired:
+        return None
+    return str(desired)
 
 
 def _default_spawn(
@@ -4131,6 +4262,18 @@ def _default_spawn(
         env["HERMES_KANBAN_RUN_ID"] = str(task.current_run_id)
     if task.claim_lock:
         env["HERMES_KANBAN_CLAIM_LOCK"] = task.claim_lock
+    terminal_timeout = _worker_terminal_timeout_env(
+        task.max_runtime_seconds,
+        env.get("TERMINAL_TIMEOUT"),
+    )
+    if terminal_timeout is not None:
+        env["TERMINAL_TIMEOUT"] = terminal_timeout
+    foreground_timeout = _worker_terminal_timeout_env(
+        task.max_runtime_seconds,
+        env.get("TERMINAL_MAX_FOREGROUND_TIMEOUT"),
+    )
+    if foreground_timeout is not None:
+        env["TERMINAL_MAX_FOREGROUND_TIMEOUT"] = foreground_timeout
     # Pin the shared board + workspaces root the dispatcher resolved, so
     # that even when the worker activates a profile (`hermes -p <name>`
     # rewrites HERMES_HOME), its kanban paths still match the
@@ -4185,7 +4328,8 @@ def _default_spawn(
     log_dir = worker_logs_dir(board=board)
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{task.id}.log"
-    _rotate_worker_log(log_path, DEFAULT_LOG_ROTATE_BYTES)
+    rotate_bytes, backup_count = worker_log_rotation_config()
+    _rotate_worker_log(log_path, rotate_bytes, backup_count)
 
     # Use 'a' so a re-run on unblock appends rather than overwrites.
     log_f = open(log_path, "ab")
@@ -4321,6 +4465,15 @@ def build_worker_context(conn: sqlite3.Connection, task_id: str) -> str:
     if task.tenant:
         lines.append(f"Tenant:   {task.tenant}")
     lines.append(f"Workspace: {task.workspace_kind} @ {task.workspace_path or '(unresolved)'}")
+    if task.max_runtime_seconds is not None:
+        terminal_timeout = _worker_terminal_timeout_env(
+            task.max_runtime_seconds,
+            os.environ.get("TERMINAL_TIMEOUT"),
+        )
+        effective_terminal_timeout = terminal_timeout or os.environ.get("TERMINAL_TIMEOUT")
+        lines.append(f"Max runtime: {task.max_runtime_seconds}s")
+        if effective_terminal_timeout:
+            lines.append(f"Terminal timeout: {effective_terminal_timeout}s")
     lines.append("")
 
     if task.body and task.body.strip():
